@@ -29,3 +29,8 @@
   margin-top: 20px;
   margin-bottom: 40px;
 }
+
+#block-bartik-branding > div > div > a {
+  font-family: 'Gruppo', cursive;
+  text-transform: uppercase;
+}

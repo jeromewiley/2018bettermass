@@ -2,6 +2,7 @@ global-styling:
   version: VERSION
   css:
     base:
+      'https://fonts.googleapis.com/css?family=Gruppo|EB+Garamond': { type: external }
       css/base/elements.css: {}
     component:
       css/components/block.css: {}
