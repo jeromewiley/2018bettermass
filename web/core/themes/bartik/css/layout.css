@@ -42,3 +42,7 @@
   width: 200px;
   text-transform: uppercase;
 }
+
+.page-node-type-page article .node__content button a {
+  color: #000;
+}
