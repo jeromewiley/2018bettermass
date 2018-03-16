@@ -34,3 +34,11 @@
   font-family: 'Gruppo', cursive;
   text-transform: uppercase;
 }
+
+.page-node-type-page article .node__content button {
+  font-size: 41px;
+  font-weight: 900;
+  border-radius: 10px;
+  width: 200px;
+  text-transform: uppercase;
+}
