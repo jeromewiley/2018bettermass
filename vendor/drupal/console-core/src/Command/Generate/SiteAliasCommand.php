@@ -47,6 +47,7 @@ class SiteAliasCommand extends Command
     private $extraOptions = [
         'ssh' => [
             'none' => '',
+            'tty' => '-tt',
             'vagrant' => '-o PasswordAuthentication=no -i ~/.vagrant.d/insecure_private_key',
         ],
         'container' => [
@@ -77,6 +78,12 @@ class SiteAliasCommand extends Command
                 $this->trans('commands.generate.site.alias.description')
             )
             ->setHelp($this->trans('commands.generate.site.alias.help'))
+            ->addOption(
+                'site',
+                null,
+                InputOption::VALUE_NONE,
+                $this->trans('commands.generate.site.alias.options.site')
+            )
             ->addOption(
                 'name',
                 null,
@@ -126,6 +133,12 @@ class SiteAliasCommand extends Command
                 $this->trans('commands.generate.site.alias.options.port')
             )
             ->addOption(
+                'drupal-console-binary',
+                null,
+                InputOption::VALUE_OPTIONAL,
+                $this->trans('commands.generate.site.alias.options.drupal-console-binary')
+            )
+            ->addOption(
                 'extra-options',
                 null,
                 InputOption::VALUE_OPTIONAL,
@@ -147,6 +160,7 @@ class SiteAliasCommand extends Command
         InputInterface $input,
         OutputInterface $output
     ) {
+        $site = $input->getOption('site');
         $name = $input->getOption('name');
         if (!$name) {
             $sites = $this->configurationManager->getSites();
@@ -225,6 +239,19 @@ class SiteAliasCommand extends Command
         }
 
         if ($type !== 'local') {
+            $drupalConsoleBinary = $input->getOption('drupal-console-binary');
+            if (!$drupalConsoleBinary) {
+
+                $drupalConsoleBinary = $this->getIo()->askEmpty(
+                    $this->trans(
+                        'commands.generate.site.alias.questions.drupal-console-binary'
+                    ),
+                    'drupal'
+                );
+
+                $input->setOption('drupal-console-binary', $drupalConsoleBinary);
+            }
+
             $extraOptions = $input->getOption('extra-options');
             if (!$extraOptions) {
                 $options = array_values($this->extraOptions[$type]);
@@ -269,6 +296,10 @@ class SiteAliasCommand extends Command
         }
 
         $directory = $input->getOption('directory');
+        if ($site && $this->drupalFinder->getComposerRoot()) {
+            $directory = $this->drupalFinder->getComposerRoot() . '/console/';
+        }
+
         if (!$directory) {
             $directory = $this->getIo()->choice(
                 $this->trans('commands.generate.site.alias.questions.directory'),
@@ -286,18 +317,24 @@ class SiteAliasCommand extends Command
         InputInterface $input,
         OutputInterface $output
     ) {
+        $site = $input->getOption('site');
+        $directory = $input->getOption('directory');
+        if ($site && $this->drupalFinder->isValidDrupal()) {
+            $directory = $this->drupalFinder->getComposerRoot() . '/console/';
+        }
         $this->generator->generate(
             [
                 'name' => $input->getOption('name'),
                 'environment' => $input->getOption('environment'),
                 'type' => $input->getOption('type'),
                 'extra_options' => $input->getOption('extra-options'),
+                'drupal_console_binary' => $input->getOption('drupal-console-binary'),
                 'root' => $input->getOption('composer-root'),
                 'uri' => $input->getOption('site-uri'),
                 'port' => $input->getOption('port'),
                 'user' => $input->getOption('user'),
                 'host' => $input->getOption('host'),
-                'directory' => $input->getOption('directory')
+                'directory' => $directory
             ]
         );
     }

@@ -6,7 +6,9 @@ namespace Drupal\{{ machine_name }}\Entity;
 {% if not revisionable %}
 use Drupal\Core\Entity\ContentEntityBase;
 {% endif %}
+{% if author_base_field %}
 use Drupal\Core\Entity\EntityStorageInterface;
+{% endif %}
 use Drupal\Core\Entity\EntityTypeInterface;
 use Drupal\Core\Field\BaseFieldDefinition;
 {% if revisionable %}
@@ -28,6 +30,9 @@ use Drupal\Core\Entity\EntityChangedTrait;
  *   id = "{{ entity_type_id }}",
  *   label = @Translation("{{ entity_type_label }}"),
  *   label_collection = @Translation("{{ entity_type_label|plural }}"),
+{% if bundle %}
+ *   bundle_label = @Translation("{{ entity_type_label }} type"),
+{% endif %}
  *   handlers = {
 {% if template %}
  *     "view_builder" = "Drupal\Core\Entity\EntityViewBuilder",
@@ -44,17 +49,43 @@ use Drupal\Core\Entity\EntityChangedTrait;
  *       "edit" = "Drupal\{{ machine_name }}\Form\{{ class_prefix }}Form",
  *       "delete" = "Drupal\Core\Entity\ContentEntityDeleteForm"
  *     },
+ *     "route_provider" = {
+ *       "html" = "Drupal\Core\Entity\Routing\AdminHtmlRouteProvider",
+ *     }
  *   },
  *   base_table = "{{ entity_type_id }}",
+{% if translatable %}
+ *   data_table = "{{ entity_type_id }}_field_data",
+{% endif %}
 {% if revisionable %}
  *   revision_table = "{{ entity_type_id }}_revision",
+{% endif %}
+{% if revisionable and translatable %}
+ *   revision_data_table = "{{ entity_type_id }}_field_revision",
+{% endif %}
+{% if revisionable %}
  *   show_revision_ui = TRUE,
 {% endif %}
+{% if translatable %}
+ *   translatable = TRUE,
+{% endif %}
+{% if bundle %}
+ *   admin_permission = "administer {{ entity_type_label|lower }} types",
+{% elseif fieldable %}
  *   admin_permission = "administer {{ entity_type_label|lower }}",
+{% else %}
+ *   admin_permission = "access {{ entity_type_label|lower }} overview",
+{% endif %}
  *   entity_keys = {
  *     "id" = "id",
 {% if revisionable %}
  *     "revision" = "revision_id",
+{% endif %}
+{% if translatable %}
+ *     "langcode" = "langcode",
+{% endif %}
+{% if bundle %}
+ *     "bundle" = "bundle",
 {% endif %}
  *     "label" = "{{ title_base_field ? 'title' : 'id' }}",
  *     "uuid" = "uuid"
@@ -71,12 +102,21 @@ use Drupal\Core\Entity\EntityChangedTrait;
  *   },
 {% endif %}
  *   links = {
- *     "canonical" = "{{ entity_base_path }}/{{ '{' }}{{ entity_type_id }}{{ '}' }}",
+{% if bundle %}
+ *     "add-form" = "{{ entity_base_path }}/add/{{ '{' }}{{ entity_type_id }}{{ '_type}' }}",
+ *     "add-page" = "{{ entity_base_path }}/add",
+{% else %}
+ *     "add-form" = "{{ entity_base_path }}/add",
+{% endif %}
+ *     "canonical" = "/{{ entity_type_id }}/{{ '{' }}{{ entity_type_id }}{{ '}' }}",
  *     "edit-form" = "{{ entity_base_path }}/{{ '{' }}{{ entity_type_id }}{{ '}' }}/edit",
  *     "delete-form" = "{{ entity_base_path }}/{{ '{' }}{{ entity_type_id }}{{ '}' }}/delete",
  *     "collection" = "/admin/content/{{ entity_type_id|u2h }}"
  *   },
-{% if fieldable %}
+{% if bundle %}
+ *   bundle_entity_type = "{{ entity_type_id }}_type",
+ *   field_ui_base_route = "entity.{{ entity_type_id }}_type.edit_form"
+{% elseif fieldable %}
  *   field_ui_base_route = "entity.{{ entity_type_id }}.settings"
 {% endif %}
  * )
@@ -87,6 +127,7 @@ class {{ class_prefix }} extends {% if revisionable %}Revisionable{% endif %}Con
   use EntityChangedTrait;
 
 {% endif %}
+{% if author_base_field %}
   /**
    * {@inheritdoc}
    *
@@ -98,6 +139,7 @@ class {{ class_prefix }} extends {% if revisionable %}Revisionable{% endif %}Con
     $values += ['uid' => \Drupal::currentUser()->id()];
   }
 
+{% endif %}
 {% if title_base_field %}
   /**
    * {@inheritdoc}
@@ -127,7 +169,7 @@ class {{ class_prefix }} extends {% if revisionable %}Revisionable{% endif %}Con
    * {@inheritdoc}
    */
   public function setStatus($status) {
-    $this->set('promote', $status);
+    $this->set('status', $status);
     return $this;
   }
 
@@ -193,6 +235,9 @@ class {{ class_prefix }} extends {% if revisionable %}Revisionable{% endif %}Con
 {% if revisionable %}
       ->setRevisionable(TRUE)
 {% endif %}
+{% if translatable %}
+      ->setTranslatable(TRUE)
+{% endif %}
       ->setLabel(t('Title'))
       ->setDescription(t('The title of the {{ entity_type_label|lower }} entity.'))
       ->setRequired(TRUE)
@@ -243,6 +288,9 @@ class {{ class_prefix }} extends {% if revisionable %}Revisionable{% endif %}Con
 {% if revisionable %}
       ->setRevisionable(TRUE)
 {% endif %}
+{% if translatable %}
+      ->setTranslatable(TRUE)
+{% endif %}
       ->setLabel(t('Description'))
       ->setDescription(t('A description of the {{ entity_type_label|lower }}.'))
       ->setDisplayOptions('form', [
@@ -262,6 +310,9 @@ class {{ class_prefix }} extends {% if revisionable %}Revisionable{% endif %}Con
     $fields['uid'] = BaseFieldDefinition::create('entity_reference')
 {% if revisionable %}
       ->setRevisionable(TRUE)
+{% endif %}
+{% if translatable %}
+      ->setTranslatable(TRUE)
 {% endif %}
       ->setLabel(t('Author'))
       ->setDescription(t('The user ID of the {{ entity_type_label|lower }} author.'))
@@ -287,6 +338,9 @@ class {{ class_prefix }} extends {% if revisionable %}Revisionable{% endif %}Con
 {% if created_base_field %}
     $fields['created'] = BaseFieldDefinition::create('created')
       ->setLabel(t('Authored on'))
+{% if translatable %}
+      ->setTranslatable(TRUE)
+{% endif %}
       ->setDescription(t('The time that the {{ entity_type_label|lower }} was created.'))
       ->setDisplayOptions('view', [
         'label' => 'above',
@@ -304,6 +358,9 @@ class {{ class_prefix }} extends {% if revisionable %}Revisionable{% endif %}Con
 {% if changed_base_field %}
     $fields['changed'] = BaseFieldDefinition::create('changed')
       ->setLabel(t('Changed'))
+{% if translatable %}
+      ->setTranslatable(TRUE)
+{% endif %}
       ->setDescription(t('The time that the {{ entity_type_label|lower }} was last edited.'));
 
 {% endif %}

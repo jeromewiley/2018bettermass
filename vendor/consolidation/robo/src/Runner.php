@@ -1,4 +1,5 @@
 <?php
+
 namespace Robo;
 
 use Composer\Autoload\ClassLoader;
@@ -10,14 +11,15 @@ use Robo\Common\IO;
 use Robo\Exception\TaskExitException;
 use League\Container\ContainerAwareInterface;
 use League\Container\ContainerAwareTrait;
+use Consolidation\Config\Util\EnvConfig;
 
 class Runner implements ContainerAwareInterface
 {
-    const ROBOCLASS = 'RoboFile';
-    const ROBOFILE = 'RoboFile.php';
-
     use IO;
     use ContainerAwareTrait;
+
+    const ROBOCLASS = 'RoboFile';
+    const ROBOFILE = 'RoboFile.php';
 
     /**
      * @var string
@@ -30,7 +32,9 @@ class Runner implements ContainerAwareInterface
     protected $roboFile;
 
     /**
-     * @var string working dir of Robo
+     * Working dir of Robo.
+     *
+     * @var string
      */
     protected $dir;
 
@@ -40,12 +44,26 @@ class Runner implements ContainerAwareInterface
     protected $errorConditions = [];
 
     /**
-     * @var string GitHub Repo for SelfUpdate
+     * GitHub Repo for SelfUpdate.
+     *
+     * @var string
      */
     protected $selfUpdateRepository = null;
 
     /**
-     * @var \Composer\Autoload\ClassLoader
+     * Filename to load configuration from (set to 'robo.yml' for RoboFiles).
+     *
+     * @var string
+     */
+    protected $configFilename = 'conf.yml';
+
+    /**
+     * @var string prefix for environment variable configuration overrides
+     */
+    protected $envConfigPrefix = false;
+
+    /**
+     * @var null|\Composer\Autoload\ClassLoader
      */
     protected $classLoader = null;
 
@@ -68,6 +86,10 @@ class Runner implements ContainerAwareInterface
         $this->dir = getcwd();
     }
 
+    /**
+     * @param string $msg
+     * @param string $errorType
+     */
     protected function errorCondition($msg, $errorType)
     {
         $this->errorConditions[$msg] = $errorType;
@@ -135,6 +157,22 @@ class Runner implements ContainerAwareInterface
     }
 
     /**
+     * Get a list of locations where config files may be loaded
+     *
+     * @param string $userConfig
+     *
+     * @return string[]
+     */
+    protected function getConfigFilePaths($userConfig)
+    {
+        $roboAppConfig = dirname(__DIR__) . '/' . basename($userConfig);
+        $configFiles = [$userConfig, $roboAppConfig];
+        if (dirname($userConfig) != '.') {
+            array_unshift($configFiles, basename($userConfig));
+        }
+        return $configFiles;
+    }
+    /**
      * @param null|\Symfony\Component\Console\Input\InputInterface $input
      * @param null|\Symfony\Component\Console\Output\OutputInterface $output
      * @param null|\Robo\Application $app
@@ -160,9 +198,12 @@ class Runner implements ContainerAwareInterface
 
         // If we were not provided a container, then create one
         if (!$this->getContainer()) {
-            $userConfig = 'robo.yml';
-            $roboAppConfig = dirname(__DIR__) . '/robo.yml';
-            $config = Robo::createConfiguration([$userConfig, $roboAppConfig]);
+            $configFiles = $this->getConfigFilePaths($this->configFilename);
+            $config = Robo::createConfiguration($configFiles);
+            if ($this->envConfigPrefix) {
+                $envConfig = new EnvConfig($this->envConfigPrefix);
+                $config->addContext('env', $envConfig);
+            }
             $container = Robo::createDefaultContainer($input, $output, $app, $config, $classLoader);
             $this->setContainer($container);
             // Automatically register a shutdown function and
@@ -231,16 +272,16 @@ class Runner implements ContainerAwareInterface
     }
 
     /**
-     * @param $relativeNamespace
+     * @param string $relativeNamespace
      *
-     * @return array|string[]
+     * @return string[]
      */
     protected function discoverCommandClasses($relativeNamespace)
     {
         /** @var \Robo\ClassDiscovery\RelativeNamespaceDiscovery $discovery */
         $discovery = Robo::service('relativeNamespaceDiscovery');
-        $discovery->setRelativeNamespace($relativeNamespace.'\Commands')
-            ->setSearchPattern('*Commands.php');
+        $discovery->setRelativeNamespace($relativeNamespace . '\Commands')
+            ->setSearchPattern('/.*Commands?\.php$/');
         return $discovery->getClasses();
     }
 
@@ -248,7 +289,7 @@ class Runner implements ContainerAwareInterface
      * @param \Robo\Application $app
      * @param string|BuilderAwareInterface|ContainerAwareInterface $commandClass
      *
-     * @return mixed|void
+     * @return null|object
      */
     public function registerCommandClass($app, $commandClass)
     {
@@ -268,7 +309,7 @@ class Runner implements ContainerAwareInterface
     }
 
     /**
-     * @param string|BuilderAwareInterface|ContainerAwareInterface  $commandClass
+     * @param string|\Robo\Contract\BuilderAwareInterface|\League\Container\ContainerAwareInterface $commandClass
      *
      * @return null|object
      */
@@ -317,7 +358,8 @@ class Runner implements ContainerAwareInterface
      *
      * @param array $args
      *
-     * @return array $args with shebang script removed
+     * @return array $args
+     *   With shebang script removed.
      */
     protected function shebang($args)
     {
@@ -344,12 +386,18 @@ class Runner implements ContainerAwareInterface
      * Determine if the specified argument is a path to a shebang script.
      * If so, load it.
      *
-     * @param string $filepath file to check
+     * @param string $filepath
+     *   File to check.
      *
-     * @return bool Returns TRUE if shebang script was processed
+     * @return bool
+     *   Returns TRUE if shebang script was processed.
      */
     protected function isShebangFile($filepath)
     {
+        // Avoid trying to call $filepath on remote URLs
+        if ((strpos($filepath, '://') !== false) && (substr($filepath, 0, 7) != 'file://')) {
+            return false;
+        }
         if (!is_file($filepath)) {
             return false;
         }
@@ -413,9 +461,9 @@ class Runner implements ContainerAwareInterface
 
         if (substr($argv[$pos], 0, 12) == '--load-from=') {
             $this->dir = substr($argv[$pos], 12);
-        } elseif (isset($argv[$pos +1])) {
-            $this->dir = $argv[$pos +1];
-            unset($argv[$pos +1]);
+        } elseif (isset($argv[$pos + 1])) {
+            $this->dir = $argv[$pos + 1];
+            unset($argv[$pos + 1]);
         }
         unset($argv[$pos]);
         // Make adjustments if '--load-from' points at a file.
@@ -495,6 +543,28 @@ class Runner implements ContainerAwareInterface
     public function setSelfUpdateRepository($selfUpdateRepository)
     {
         $this->selfUpdateRepository = $selfUpdateRepository;
+        return $this;
+    }
+
+    /**
+     * @param string $configFilename
+     *
+     * @return $this
+     */
+    public function setConfigurationFilename($configFilename)
+    {
+        $this->configFilename = $configFilename;
+        return $this;
+    }
+
+    /**
+     * @param string $envConfigPrefix
+     *
+     * @return $this
+     */
+    public function setEnvConfigPrefix($envConfigPrefix)
+    {
+        $this->envConfigPrefix = $envConfigPrefix;
         return $this;
     }
 
